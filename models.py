@@ -1,14 +1,13 @@
 from __future__ import print_function, division
 
-from keras.models import Model
-from keras.layers import Concatenate, Add, Average, Input, Dense, Flatten, BatchNormalization, Activation, LeakyReLU
-from keras.layers.convolutional import Convolution2D, MaxPooling2D, UpSampling2D, Convolution2DTranspose
-from keras import backend as K
-from keras.utils.np_utils import to_categorical
-import keras.callbacks as callbacks
-import keras.optimizers as optimizers
+from tensorflow.contrib.keras.api.keras.models import Model
+from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D
+from tensorflow.contrib.keras.api.keras import backend as K
 
-from advanced import HistoryCheckpoint, SubPixelUpscaling, non_local_block, TensorBoardBatch
+import tensorflow.contrib.keras.api.keras.callbacks as callbacks
+import tensorflow.contrib.keras.api.keras.optimizers as optimizers
+
+from advanced import TensorBoardBatch
 import img_utils
 
 import numpy as np
@@ -55,7 +54,7 @@ class BaseSuperResolutionModel(object):
         """
         Base model to provide a standard interface of adding Super Resolution models
         """
-        self.model = None # type: Model
+        self.model = None
         self.model_name = model_name
         self.scale_factor = scale_factor
         self.weight_path = None
@@ -71,26 +70,13 @@ class BaseSuperResolutionModel(object):
         """
         Subclass dependent implementation.
         """
-        if self.type_requires_divisible_shape and height is not None and width is not None:
-            assert height * img_utils._image_scale_multiplier % 4 == 0, "Height of the image must be divisible by 4"
-            assert width * img_utils._image_scale_multiplier % 4 == 0, "Width of the image must be divisible by 4"
-
-        if K.image_dim_ordering() == "th":
-            if width is not None and height is not None:
-                shape = (channels, width * img_utils._image_scale_multiplier, height * img_utils._image_scale_multiplier)
-            else:
-                shape = (channels, None, None)
-        else:
-            if width is not None and height is not None:
-                shape = (width * img_utils._image_scale_multiplier, height * img_utils._image_scale_multiplier, channels)
-            else:
-                shape = (None, None, channels)
+        shape = (64, 64, 3)
 
         init = Input(shape=shape)
 
         return init
 
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="Model History.txt") -> Model:
+    def fit(self, batch_size=128, nb_epochs=100, save_history=True) -> Model:
         """
         Standard method to train any of the models.
         """
@@ -102,22 +88,18 @@ class BaseSuperResolutionModel(object):
         callback_list = [callbacks.ModelCheckpoint(self.weight_path, monitor='val_PSNRLoss', save_best_only=True,
                                                    mode='max', save_weights_only=True, verbose=2)]
         if save_history:
-            callback_list.append(HistoryCheckpoint(history_fn))
 
-            if K.backend() == 'tensorflow':
-                log_dir = './%s_logs/' % self.model_name
-                tensorboard = TensorBoardBatch(log_dir, batch_size=batch_size)
-                callback_list.append(tensorboard)
+            log_dir = './%s_logs/' % self.model_name
+            tensorboard = TensorBoardBatch(log_dir, batch_size=batch_size)
+            callback_list.append(tensorboard)
 
         print("Training model : %s" % (self.__class__.__name__))
-        self.model.fit_generator(img_utils.image_generator(train_path, scale_factor=self.scale_factor,
-                                                           small_train_images=self.type_true_upscaling,
+        self.model.fit_generator(img_utils.image_generator(train_path, scale_factor=2,
                                                            batch_size=batch_size),
                                  steps_per_epoch=samples_per_epoch // batch_size + 1,
                                  epochs=nb_epochs, callbacks=callback_list,
                                  validation_data=img_utils.image_generator(validation_path,
-                                                                           scale_factor=self.scale_factor,
-                                                                           small_train_images=self.type_true_upscaling,
+                                                                           scale_factor=2,
                                                                            batch_size=batch_size),
                                  validation_steps=val_count // batch_size + 1)
 
@@ -341,12 +323,7 @@ def _evaluate(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=Fa
             if not sr_model.type_true_upscaling:
                 img = img_utils.imresize(img, (x_width, x_height), interp='bicubic')
 
-
             x = np.expand_dims(img, axis=0)
-
-            if K.image_dim_ordering() == "th":
-                x = x.transpose((0, 3, 1, 2))
-                y = y.transpose((0, 3, 1, 2))
 
             if sr_model.uses_learning_phase:
                 y_pred = sr_model.evaluation_func([x, 0])[0][0]
@@ -369,9 +346,6 @@ def _evaluate(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=Fa
             print("Validated image : %s, Time required : %0.2f, PSNR value : %0.4f" % (impath, t2 - t1, psnr_val))
 
             generated_path = predict_path + "%s_%s_generated.png" % (sr_model.model_name, os.path.splitext(impath)[0])
-
-            if K.image_dim_ordering() == "th":
-                y_pred = y_pred.transpose((1, 2, 0))
 
             y_pred = np.clip(y_pred, 0, 255).astype('uint8')
             img_utils.imsave(generated_path, y_pred)
@@ -433,9 +407,6 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
 
             x = np.expand_dims(img, axis=0)
 
-            if K.image_dim_ordering() == "th":
-                x = x.transpose((0, 3, 1, 2))
-                y = y.transpose((0, 3, 1, 2))
 
             sr_model.model = sr_model.create_model(height, width, load_weights=True)
 
@@ -469,9 +440,6 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
 
             generated_path = predict_path + "%s_%s_generated.png" % (sr_model.model_name, os.path.splitext(impath)[0])
 
-            if K.image_dim_ordering() == "th":
-                y_pred = y_pred.transpose((1, 2, 0))
-
             y_pred = np.clip(y_pred, 0, 255).astype('uint8')
             img_utils.imsave(generated_path, y_pred)
 
@@ -481,7 +449,7 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
 class ImageSuperResolutionModel(BaseSuperResolutionModel):
 
     def __init__(self, scale_factor):
-        super(ImageSuperResolutionModel, self).__init__("Image SR", scale_factor)
+        super(ImageSuperResolutionModel, self).__init__("data/SR", scale_factor)
 
         self.f1 = 9
         self.f2 = 1
@@ -490,7 +458,7 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         self.n1 = 64
         self.n2 = 32
 
-        self.weight_path = "weights/SR Weights %dX.h5" % (self.scale_factor)
+        self.weight_path = "data/weights/SR Weights %dX.h5" % self.scale_factor
 
     def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
         """
@@ -507,718 +475,13 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
 
         adam = optimizers.Adam(lr=1e-3)
         model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path)
+        if load_weights is True:
+            model.load_weights(self.weight_path)
 
         self.model = model
         return model
 
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="SRCNN History.txt"):
-        return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history, history_fn)
+    def fit(self, batch_size=128, nb_epochs=100, save_history=True):
+        return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history)
 
 
-class ExpantionSuperResolution(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(ExpantionSuperResolution, self).__init__("Expanded Image SR", scale_factor)
-
-        self.f1 = 9
-        self.f2_1 = 1
-        self.f2_2 = 3
-        self.f2_3 = 5
-        self.f3 = 5
-
-        self.n1 = 64
-        self.n2 = 32
-
-        self.weight_path = "weights/Expantion SR Weights %dX.h5" % (self.scale_factor)
-
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        """
-            Creates a model to be used to scale images of specific height and width.
-        """
-        init = super(ExpantionSuperResolution, self).create_model(height, width, channels, load_weights, batch_size)
-
-        x = Convolution2D(self.n1, (self.f1, self.f1), activation='relu', padding='same', name='level1')(init)
-
-        x1 = Convolution2D(self.n2, (self.f2_1, self.f2_1), activation='relu', padding='same', name='lavel1_1')(x)
-        x2 = Convolution2D(self.n2, (self.f2_2, self.f2_2), activation='relu', padding='same', name='lavel1_2')(x)
-        x3 = Convolution2D(self.n2, (self.f2_3, self.f2_3), activation='relu', padding='same', name='lavel1_3')(x)
-
-        x = Average()([x1, x2, x3])
-
-        out = Convolution2D(channels, (self.f3, self.f3), activation='relu', padding='same', name='output')(x)
-
-        model = Model(init, out)
-        adam = optimizers.Adam(lr=1e-3)
-        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path)
-
-        self.model = model
-        return model
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="ESRCNN History.txt"):
-        return super(ExpantionSuperResolution, self).fit(batch_size, nb_epochs, save_history, history_fn)
-
-
-class DenoisingAutoEncoderSR(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(DenoisingAutoEncoderSR, self).__init__("Denoise AutoEncoder SR", scale_factor)
-
-        self.n1 = 64
-        self.n2 = 32
-
-        self.weight_path = "weights/Denoising AutoEncoder %dX.h5" % (self.scale_factor)
-
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        """
-            Creates a model to remove / reduce noise from upscaled images.
-        """
-        from keras.layers.convolutional import Deconvolution2D
-
-        # Perform check that model input shape is divisible by 4
-        init = super(DenoisingAutoEncoderSR, self).create_model(height, width, channels, load_weights, batch_size)
-
-        if K.image_dim_ordering() == "th":
-            output_shape = (None, channels, width, height)
-        else:
-            output_shape = (None, width, height, channels)
-
-        level1_1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(init)
-        level2_1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(level1_1)
-
-        level2_2 = Convolution2DTranspose(self.n1, (3, 3), activation='relu', padding='same')(level2_1)
-        level2 = Add()([level2_1, level2_2])
-
-        level1_2 = Convolution2DTranspose(self.n1, (3, 3), activation='relu', padding='same')(level2)
-        level1 = Add()([level1_1, level1_2])
-
-        decoded = Convolution2D(channels, (5, 5), activation='linear', padding='same')(level1)
-
-        model = Model(init, decoded)
-        adam = optimizers.Adam(lr=1e-3)
-        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path)
-
-        self.model = model
-        return model
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="DSRCNN History.txt"):
-        return super(DenoisingAutoEncoderSR, self).fit(batch_size, nb_epochs, save_history, history_fn)
-
-class DeepDenoiseSR(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(DeepDenoiseSR, self).__init__("Deep Denoise SR", scale_factor)
-
-        # Treat this model as a denoising auto encoder
-        # Force the fit, evaluate and upscale methods to take special care about image shape
-        self.type_requires_divisible_shape = True
-
-        self.n1 = 64
-        self.n2 = 128
-        self.n3 = 256
-
-        self.weight_path = "weights/Deep Denoise Weights %dX.h5" % (self.scale_factor)
-
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        # Perform check that model input shape is divisible by 4
-        init = super(DeepDenoiseSR, self).create_model(height, width, channels, load_weights, batch_size)
-
-        c1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(init)
-        c1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(c1)
-
-        x = MaxPooling2D((2, 2))(c1)
-
-        c2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(x)
-        c2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(c2)
-
-        x = MaxPooling2D((2, 2))(c2)
-
-        c3 = Convolution2D(self.n3, (3, 3), activation='relu', padding='same')(x)
-
-        x = UpSampling2D()(c3)
-
-        c2_2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(x)
-        c2_2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(c2_2)
-
-        m1 = Add()([c2, c2_2])
-        m1 = UpSampling2D()(m1)
-
-        c1_2 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(m1)
-        c1_2 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(c1_2)
-
-        m2 = Add()([c1, c1_2])
-
-        decoded = Convolution2D(channels, 5, 5, activation='linear', border_mode='same')(m2)
-
-        model = Model(init, decoded)
-        adam = optimizers.Adam(lr=1e-3)
-        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path)
-
-        self.model = model
-        return model
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="Deep DSRCNN History.txt"):
-        super(DeepDenoiseSR, self).fit(batch_size, nb_epochs, save_history, history_fn)
-
-class ResNetSR(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(ResNetSR, self).__init__("ResNetSR", scale_factor)
-
-        # Treat this model as a denoising auto encoder
-        # Force the fit, evaluate and upscale methods to take special care about image shape
-        self.type_requires_divisible_shape = True
-        self.uses_learning_phase = False
-
-        self.n = 64
-        self.mode = 2
-
-        self.weight_path = "weights/ResNetSR %dX.h5" % (self.scale_factor)
-        self.type_true_upscaling = True
-
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        init =  super(ResNetSR, self).create_model(height, width, channels, load_weights, batch_size)
-
-        x0 = Convolution2D(64, (3, 3), activation='relu', padding='same', name='sr_res_conv1')(init)
-
-        #x1 = Convolution2D(64, (3, 3), activation='relu', padding='same', strides=(2, 2), name='sr_res_conv2')(x0)
-
-        #x2 = Convolution2D(64, (3, 3), activation='relu', padding='same', strides=(2, 2), name='sr_res_conv3')(x1)
-
-        x = self._residual_block(x0, 1)
-
-        nb_residual = 5
-        for i in range(nb_residual):
-            x = self._residual_block(x, i + 2)
-
-        x = Add()([x, x0])
-
-        x = self._upscale_block(x, 1)
-        #x = Add()([x, x1])
-
-        #x = self._upscale_block(x, 2)
-        #x = Add()([x, x0])
-
-        x = Convolution2D(3, (3, 3), activation="linear", padding='same', name='sr_res_conv_final')(x)
-
-        model = Model(init, x)
-
-        adam = optimizers.Adam(lr=1e-3)
-        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path, by_name=True)
-
-        self.model = model
-        return model
-
-    def _residual_block(self, ip, id):
-        mode = False if self.mode == 2 else None
-        channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
-        init = ip
-
-        x = Convolution2D(64, (3, 3), activation='linear', padding='same',
-                          name='sr_res_conv_' + str(id) + '_1')(ip)
-        x = BatchNormalization(axis=channel_axis, name="sr_res_batchnorm_" + str(id) + "_1")(x, training=mode)
-        x = Activation('relu', name="sr_res_activation_" + str(id) + "_1")(x)
-
-        x = Convolution2D(64, (3, 3), activation='linear', padding='same',
-                          name='sr_res_conv_' + str(id) + '_2')(x)
-        x = BatchNormalization(axis=channel_axis, name="sr_res_batchnorm_" + str(id) + "_2")(x, training=mode)
-
-        m = Add(name="sr_res_merge_" + str(id))([x, init])
-
-        return m
-
-    def _upscale_block(self, ip, id):
-        init = ip
-
-        channel_dim = 1 if K.image_data_format() == 'channels_first' else -1
-        channels = init._keras_shape[channel_dim]
-
-        #x = Convolution2D(256, (3, 3), activation="relu", padding='same', name='sr_res_upconv1_%d' % id)(init)
-        #x = SubPixelUpscaling(r=2, channels=self.n, name='sr_res_upscale1_%d' % id)(x)
-        x = UpSampling2D()(init)
-        x = Convolution2D(self.n, (3, 3), activation="relu", padding='same', name='sr_res_filter1_%d' % id)(x)
-
-        # x = Convolution2DTranspose(channels, (4, 4), strides=(2, 2), padding='same', activation='relu',
-        #                            name='upsampling_deconv_%d' % id)(init)
-
-        return x
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="ResNetSR History.txt"):
-        super(ResNetSR, self).fit(batch_size, nb_epochs, save_history, history_fn)
-
-
-class EfficientSubPixelConvolutionalSR(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(EfficientSubPixelConvolutionalSR, self).__init__("ESPCNN SR", scale_factor)
-
-        self.n1 = 64
-        self.n2 = 32
-
-        self.f1 = 5
-        self.f2 = 3
-        self.f3 = 3
-
-        self.weight_path = "weights/ESPCNN Weights %d.h5" % scale_factor
-
-        # Flag to denote that this is a "true" upsampling model.
-        # Image size will be multiplied by scale factor to get output image size
-        self.true_upsampling = True
-
-    def create_model(self, height=16, width=16, channels=3, load_weights=False, batch_size=128):
-        # Note height, width = 16 instead of 32 like usual
-        init = super(EfficientSubPixelConvolutionalSR, self).create_model(height, width, channels,
-                                                                          load_weights, batch_size)
-
-        x = Convolution2D(self.n1, (self.f1, self.f1), activation='relu', padding='same', name='level1')(init)
-        x = Convolution2D(self.n2, (self.f2, self.f2), activation='relu', padding='same', name='level2')(x)
-
-        x = self._upscale_block(x, 1)
-
-        out = Convolution2D(3, (9, 9), activation='linear', padding='same')(x)
-
-        model = Model(init, out)
-
-        adam = optimizers.Adam(lr=1e-3)
-        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path)
-
-        self.model = model
-        return model
-
-    def _upscale_block(self, ip, id):
-        init = ip
-
-        # x = Convolution2D(256, (3, 3), activation="relu", padding='same', name='espcnn_upconv1_%d' % id)(init)
-        # x = SubPixelUpscaling(r=2, channels=self.n1, name='espcnn_upconv1__upscale1_%d' % id)(x)
-        # x = Convolution2D(256, (3, 3), activation="relu", padding='same', name='espcnn_upconv1_filter1_%d' % id)(x)
-
-        x = Convolution2DTranspose(128, (3, 3), strides=(2, 2), padding='same', activation='relu')(init)
-
-        return x
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="ESPCNN History.txt"):
-        super(EfficientSubPixelConvolutionalSR, self).fit(batch_size, nb_epochs, save_history, history_fn)
-
-
-class GANImageSuperResolutionModel(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(GANImageSuperResolutionModel, self).__init__("GAN Image SR", scale_factor)
-
-        self.f1 = 9
-        self.f2 = 1
-        self.f3 = 5
-
-        self.n1 = 64
-        self.n2 = 32
-
-        self.gen_model = None # type: Model
-        self.disc_model = None # type: Model
-
-        self.type_scale_type = 'tanh'
-
-        self.weight_path = "weights/GAN SR Weights %dX.h5" % (self.scale_factor)
-        self.gen_weight_path = "weights/GAN SR Pretrain Weights %dX.h5" % (self.scale_factor)
-        self.disc_weight_path = "weights/GAN SR Discriminator Weights %dX.h5" % (self.scale_factor)
-
-
-    def create_model(self, mode='test', height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        """
-            Creates a model to be used to scale images of specific height and width.
-        """
-        assert mode in ['test', 'train'], "'mode' must be either 'train' or 'test'"
-
-        channel_axis = 1 if K.image_dim_ordering() == 'th' else -1
-
-        gen_init = super(GANImageSuperResolutionModel, self).create_model(height, width, channels, load_weights, batch_size)
-
-        x = Convolution2D(self.n1, (self.f1, self.f1), activation='relu', padding='same', name='gen_level1')(gen_init)
-        x = LeakyReLU(alpha=0.25)(x)
-        x = Convolution2D(self.n2, (self.f2, self.f2), activation='relu', padding='same', name='gen_level2')(x)
-        x = LeakyReLU(alpha=0.25)(x)
-
-        out = Convolution2D(channels, (self.f3, self.f3), activation='tanh', padding='same', name='gen_output')(x)
-
-        gen_model = Model(gen_init, out)
-
-        adam = optimizers.Adam(lr=1e-4)
-        gen_model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights and mode == 'test': gen_model.load_weights(self.weight_path, by_name=True)
-
-        self.model = gen_model
-
-        if mode == 'train':
-            try:
-                gen_model.load_weights(self.weight_path)
-            except:
-                print('Could not load weights of GAN SR model for training.')
-
-        if mode == 'train':
-            disc_init = super(GANImageSuperResolutionModel, self).create_model(height, width, channels, load_weights, batch_size)
-
-            x = Convolution2D(64, (3, 3), padding='same', name='disc_level1_1')(disc_init)
-            x = LeakyReLU(alpha=0.25, name='disc_lr_1_1')(x)
-            x = Convolution2D(64, (3, 3), padding='same', name='disc_level1_2',
-                          strides=(2, 2))(x)
-            x = LeakyReLU(alpha=0.25, name='disc_lr_1_2')(x)
-            x = BatchNormalization(axis=channel_axis, name='disc_bn_1')(x, training=False)
-
-            x = Convolution2D(128, (3, 3), padding='same', name='disc_level2_1')(x)
-            x = LeakyReLU(alpha=0.25, name='disc_lr_2_1')(x)
-            x = Convolution2D(128, (3, 3), padding='same', name='disc_level2_2',
-                              strides=(2, 2))(x)
-            x = LeakyReLU(alpha=0.25, name='disc_lr_2_2')(x)
-            x = BatchNormalization(axis=channel_axis, name='disc_bn_2')(x, training=False)
-
-            x = Flatten(name='disc_flatten')(x)
-            x = Dense(128, name='disc_dense_1')(x)
-            x = LeakyReLU(alpha=0.25, name='disc_lr_final')(x)
-            out = Dense(2, activation='softmax', name='disc_output')(x)
-
-            disc_model = Model(disc_init, out)
-
-            adam = optimizers.Adam(lr=1e-3)
-            disc_model.compile(optimizer=adam, loss='categorical_crossentropy', metrics=['acc'])
-            if load_weights: disc_model.load_weights(self.disc_weight_path)
-
-            for layer in disc_model.layers:
-                layer.trainable = False
-
-            gen_out = gen_model(gen_init)
-            disc_out = disc_model(gen_out)
-
-            full_model = Model(input=gen_init, output=disc_out)
-
-            for layer in full_model.layers[2].layers:
-                layer.trainable = False
-
-            full_model.compile(optimizers.Adam(lr=1e-4), loss='categorical_crossentropy', metrics=['acc'])
-
-            for layer in disc_model.layers:
-                layer.trainable = True
-
-            self.model = full_model
-            self.gen_model = gen_model
-            self.disc_model = disc_model
-
-            # Setup evaluation function for validation
-            self.evaluation_func = K.function([self.gen_model.layers[0].input],
-                                              [self.gen_model.layers[-1].output])
-
-        else:
-            self.model = gen_model
-
-        return self.model
-
-
-    def set_trainable(self, model, value, prefix='gen'):
-        for layer in model.layers:
-            if 'model' in layer.name:
-                model_index = -1
-
-                for deep_layer in model.layers[1].layers: # check generator layers
-                    if prefix in deep_layer.name:
-                        deep_layer.trainable = value
-                        model_index = 1
-
-                for deep_layer in model.layers[2].layers: # check discriminator layers
-                    if prefix in deep_layer.name:
-                        deep_layer.trainable = value
-                        model_index = 2
-
-                model.layers[model_index].trainable = value
-                break
-
-            elif prefix in layer.name: # discriminator model
-                layer.trainable = value
-
-
-    def fit(self, nb_pretrain_samples=5000, batch_size=128, nb_epochs=100, disc_train_flip=0.1,
-            save_history=True, history_fn="GAN SRCNN History.txt"):
-        samples_per_epoch = img_utils.image_count()
-        meanaxis = (0, 2, 3) if K.image_dim_ordering() == 'th' else (0, 1, 2)
-
-        if self.model == None: self.create_model(mode='train', batch_size=batch_size)
-
-        if os.path.exists(self.gen_weight_path) and os.path.exists(self.disc_weight_path):
-            self.gen_model.load_weights(self.gen_weight_path)
-            self.disc_model.load_weights(self.disc_weight_path)
-            print("Pre-trained Generator and Discriminator network weights loaded")
-        else:
-            nb_train_samples = nb_pretrain_samples
-
-            print('Pre-training on %d images' % (nb_train_samples))
-            batchX, batchY = next(img_utils.image_generator(train_path, scale_factor=self.scale_factor,
-                                                       small_train_images=self.type_true_upscaling,
-                                                       batch_size=nb_train_samples))
-
-            # [-1, 1] scale conversion from [0, 1]
-            batchX = ((batchX * 255) - 127.5) / 127.5
-            batchY = ((batchY * 255) - 127.5) / 127.5
-
-            print("Pre-training Generator network")
-            hist = self.gen_model.fit(batchX, batchY, batch_size, nb_epoch=200, verbose=2)
-            print("Generator pretrain final PSNR : ", hist.history['PSNRLoss'][-1])
-
-            print("Pre-training Discriminator network")
-
-            genX = self.gen_model.predict(batchX, batch_size=batch_size)
-
-            print('GenX Output mean (per channel) :', np.mean(genX, axis=meanaxis))
-            print('BatchX mean (per channel) :', np.mean(batchX, axis=meanaxis))
-
-            X = np.concatenate((genX, batchX))
-
-            # Using soft and noisy labels
-            if np.random.uniform() > disc_train_flip:
-                # give correct classifications
-                y = [0] * nb_train_samples + [1] * nb_train_samples
-            else:
-                # give wrong classifications (noisy labels)
-                y = [1] * nb_train_samples + [0] * nb_train_samples
-
-            y = np.asarray(y, dtype=np.float32).reshape(-1, 1)
-            y = to_categorical(y, nb_classes=2)
-            y = img_utils.smooth_gan_labels(y)
-
-            hist = self.disc_model.fit(X, y, batch_size=batch_size,
-                                       nb_epoch=1, verbose=0)
-
-            print('Discriminator History :', hist.history)
-            print()
-
-        self.gen_model.save_weights(self.gen_weight_path, overwrite=True)
-        self.disc_model.save_weights(self.disc_weight_path, overwrite=True)
-
-        iteration = 0
-        save_index = 1
-
-        print("Training full model : %s" % (self.__class__.__name__))
-
-        for i in range(nb_epochs):
-            print("Epoch : %d" % (i + 1))
-            print()
-
-            for x, _ in img_utils.image_generator(train_path, scale_factor=self.scale_factor,
-                                                  small_train_images=self.type_true_upscaling,  batch_size=batch_size):
-                t1 = time.time()
-
-                x = ((x * 255) - 127.5) / 127.5
-
-                X_pred = self.gen_model.predict(x, batch_size)
-
-                print("Input batchX mean (per channel) :", np.mean(x, axis=meanaxis))
-                print("X_pred mean (per channel) :", np.mean(X_pred, axis=meanaxis))
-
-                X = np.concatenate((X_pred, x))
-                # Using soft and noisy labels
-                if np.random.uniform() > disc_train_flip:
-                    # give correct classifications
-                    y_disc = [0] * nb_train_samples + [1] * nb_train_samples
-                else:
-                    # give wrong classifications (noisy labels)
-                    y_disc = [1] * nb_train_samples + [0] * nb_train_samples
-
-                y_disc = np.asarray(y_disc, dtype=np.float32).reshape(-1, 1)
-                y_disc = to_categorical(y_disc, nb_classes=2)
-                y_disc = img_utils.smooth_gan_labels(y_disc)
-
-                hist = self.disc_model.fit(X, y_disc, verbose=0, batch_size=batch_size, nb_epoch=1)
-
-                discriminator_loss = hist.history['loss'][0]
-                discriminator_acc = hist.history['acc'][0]
-
-                # Using soft labels
-                y_model = [1] * nb_train_samples
-                y_model = np.asarray(y_model, dtype=np.int).reshape(-1, 1)
-                y_model = to_categorical(y_model, nb_classes=2)
-                y_model = img_utils.smooth_gan_labels(y_model)
-
-                hist = self.model.fit(x, y_model, batch_size, nb_epoch=1, verbose=0)
-                generative_loss = hist.history['loss'][0]
-
-                iteration += batch_size
-                save_index += 1
-
-                t2 = time.time()
-
-                print("Iter : %d / %d | Time required : %0.2f seconds | Discriminator Loss / Acc : %0.6f / %0.3f | "
-                      "Generative Loss : %0.6f" % (iteration, samples_per_epoch, t2 - t1,
-                                                   discriminator_loss, discriminator_acc, generative_loss))
-
-                # Validate at end of epoch
-                if iteration >= samples_per_epoch:
-                    print("Evaluating generator model...")
-                    # losses = self.gen_model.evaluate_generator(generator=img_utils.image_generator(train_path,
-                    #                                            scale_factor=self.scale_factor,
-                    #                                            small_train_images=self.type_true_upscaling,
-                    #                                            batch_size=batch_size),
-                    #                                            val_samples=samples_per_epoch)
-                    #
-                    # print('Generator Loss (PSNR):', losses[-1])
-
-                    self.evaluate('val_images/')
-
-                # Save weights every 100 iterations
-                if save_index % 100 == 0:
-                    print("Saving generator weights")
-                    self.gen_model.save_weights(self.weight_path, overwrite=True)
-
-                if iteration >= samples_per_epoch:
-                    break
-
-            iteration = 0
-            save_index = 1
-
-        return self.model
-
-    def evaluate(self, validation_dir):
-        _evaluate(self, validation_dir, scale_pred=True)
-
-class DistilledResNetSR(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(DistilledResNetSR, self).__init__("DistilledResNetSR", scale_factor)
-
-        # Treat this model as a denoising auto encoder
-        # Force the fit, evaluate and upscale methods to take special care about image shape
-        self.type_requires_divisible_shape = True
-        self.uses_learning_phase = False
-
-        self.n = 32
-        self.mode = 2
-
-        self.weight_path = "weights/DistilledResNetSR %dX.h5" % (self.scale_factor)
-        self.type_true_upscaling = True
-
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        init =  super(DistilledResNetSR, self).create_model(height, width, channels, load_weights, batch_size)
-
-        x0 = Convolution2D(self.n, (3, 3), activation='relu', padding='same', name='student_sr_res_conv1')(init)
-
-        x = self._residual_block(x0, 1)
-
-        x = Add(name='student_residual')([x, x0])
-        x = self._upscale_block(x, 1)
-
-        x = Convolution2D(3, (3, 3), activation="linear", padding='same', name='student_sr_res_conv_final')(x)
-
-        model = Model(init, x)
-        # dont compile yet
-        if load_weights: model.load_weights(self.weight_path, by_name=True)
-
-        self.model = model
-        return model
-
-    def _residual_block(self, ip, id):
-        mode = False if self.mode == 2 else None
-        channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
-        init = ip
-
-        x = Convolution2D(self.n, (3, 3), activation='linear', padding='same',
-                          name='student_sr_res_conv_' + str(id) + '_1')(ip)
-        x = BatchNormalization(axis=channel_axis, name="student_sr_res_batchnorm_" + str(id) + "_1")(x, training=mode)
-        x = Activation('relu', name="student_sr_res_activation_" + str(id) + "_1")(x)
-
-        x = Convolution2D(self.n, (3, 3), activation='linear', padding='same',
-                          name='student_sr_res_conv_' + str(id) + '_2')(x)
-        x = BatchNormalization(axis=channel_axis, name="student_sr_res_batchnorm_" + str(id) + "_2")(x, training=mode)
-
-        m = Add(name="student_sr_res_merge_" + str(id))([x, init])
-
-        return m
-
-    def _upscale_block(self, ip, id):
-        init = ip
-
-        channel_dim = 1 if K.image_data_format() == 'channels_first' else -1
-        channels = init._keras_shape[channel_dim]
-
-        x = UpSampling2D(name='student_upsampling_%d' % id)(init)
-        x = Convolution2D(self.n * 2, (3, 3), activation="relu", padding='same', name='student_sr_res_filter1_%d' % id)(x)
-
-        return x
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="Distilled ResNetSR History.txt"):
-        super(DistilledResNetSR, self).fit(batch_size, nb_epochs, save_history, history_fn)
-
-
-class NonLocalResNetSR(BaseSuperResolutionModel):
-
-    def __init__(self, scale_factor):
-        super(NonLocalResNetSR, self).__init__("NonLocalResNetSR", scale_factor)
-
-        # Treat this model as a denoising auto encoder
-        # Force the fit, evaluate and upscale methods to take special care about image shape
-        self.type_requires_divisible_shape = True
-        self.uses_learning_phase = False
-
-        self.n = 32
-        self.mode = 2
-
-        self.weight_path = "weights/NonLocalResNetSR %dX.h5" % (self.scale_factor)
-        self.type_true_upscaling = True
-
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
-        init =  super(NonLocalResNetSR, self).create_model(height, width, channels, load_weights, batch_size)
-
-        x0 = Convolution2D(self.n, (3, 3), activation='relu', padding='same', name='sr_res_conv1')(init)
-        x0 = non_local_block(x0)
-
-        x = self._residual_block(x0, 1)
-
-        nb_residual = 5
-        for i in range(nb_residual):
-            x = self._residual_block(x, i + 2)
-
-        x = non_local_block(x, computation_compression=2)
-        x = Add()([x, x0])
-
-        x = self._upscale_block(x, 1)
-
-        x = Convolution2D(3, (3, 3), activation="linear", padding='same', name='sr_res_conv_final')(x)
-
-        model = Model(init, x)
-
-        adam = optimizers.Adam(lr=1e-3)
-        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
-        if load_weights: model.load_weights(self.weight_path, by_name=True)
-
-        self.model = model
-        return model
-
-    def _residual_block(self, ip, id):
-        mode = False if self.mode == 2 else None
-        channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
-        init = ip
-
-        x = Convolution2D(self.n, (3, 3), activation='linear', padding='same',
-                          name='sr_res_conv_' + str(id) + '_1')(ip)
-        x = BatchNormalization(axis=channel_axis, name="sr_res_batchnorm_" + str(id) + "_1")(x, training=mode)
-        x = Activation('relu', name="sr_res_activation_" + str(id) + "_1")(x)
-
-        x = Convolution2D(self.n, (3, 3), activation='linear', padding='same',
-                          name='sr_res_conv_' + str(id) + '_2')(x)
-        x = BatchNormalization(axis=channel_axis, name="sr_res_batchnorm_" + str(id) + "_2")(x, training=mode)
-
-        m = Add(name="sr_res_merge_" + str(id))([x, init])
-
-        return m
-
-    def _upscale_block(self, ip, id):
-        init = ip
-
-        channel_dim = 1 if K.image_data_format() == 'channels_first' else -1
-
-        x = UpSampling2D()(init)
-        x = Convolution2D(self.n, (3, 3), activation="relu", padding='same', name='sr_res_filter1_%d' % id)(x)
-
-        return x
-
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True, history_fn="Non Local ResNetSR History.txt"):
-        super(NonLocalResNetSR, self).fit(batch_size, nb_epochs, save_history, history_fn)
