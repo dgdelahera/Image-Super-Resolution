@@ -66,11 +66,18 @@ class BaseSuperResolutionModel(object):
         self.evaluation_func = None
         self.uses_learning_phase = False
 
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128) -> Model:
+    def create_model(self, height=None, width=None, channels=3, load_weights=False, batch_size=128) -> Model:
         """
         Subclass dependent implementation.
         """
-        shape = (64, 64, 3)
+        if self.type_requires_divisible_shape and height is not None and width is not None:
+            assert height * img_utils._image_scale_multiplier % 4 == 0, "Height of the image must be divisible by 4"
+            assert width * img_utils._image_scale_multiplier % 4 == 0, "Width of the image must be divisible by 4"
+
+        if width is not None and height is not None:
+            shape = (width * img_utils._image_scale_multiplier, height * img_utils._image_scale_multiplier, channels)
+        else:
+            shape = (None, None, channels)
 
         init = Input(shape=shape)
 
@@ -89,7 +96,7 @@ class BaseSuperResolutionModel(object):
                                                    mode='max', save_weights_only=True, verbose=2)]
         if save_history:
 
-            log_dir = './%s_logs/' % self.model_name
+            log_dir = 'data/%s_logs/' % self.model_name
             tensorboard = TensorBoardBatch(log_dir, batch_size=batch_size)
             callback_list.append(tensorboard)
 
@@ -174,11 +181,6 @@ class BaseSuperResolutionModel(object):
             fn = path[0] + "_intermediate_" + path[1]
             intermediate_img = imresize(true_img, (init_dim_1 * scale_factor, init_dim_2 * scale_factor))
             imsave(fn, intermediate_img)
-
-        # Transpose and Process images
-        if K.image_dim_ordering() == "th":
-            img_conv = images.transpose((0, 3, 1, 2)).astype(np.float32) / 255.
-        else:
             img_conv = images.astype(np.float32) / 255.
 
         model = self.create_model(img_dim_2, img_dim_1, load_weights=True)
@@ -189,11 +191,7 @@ class BaseSuperResolutionModel(object):
 
         if verbose: print("De-processing images.")
 
-         # Deprocess patches
-        if K.image_dim_ordering() == "th":
-            result = result.transpose((0, 2, 3, 1)).astype(np.float32) * 255.
-        else:
-            result = result.astype(np.float32) * 255.
+        result = result.astype(np.float32) * 255.
 
         # Output shape is (original_width * scale, original_height * scale, nb_channels)
         if mode == 'patch':
@@ -256,12 +254,13 @@ class BaseSuperResolutionModel(object):
         return img_dim_1, img_dim_2,
 
 
-def _evaluate(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=False):
+def _evaluate(sr_model: BaseSuperResolutionModel, validation_dir, scale_pred=False):
     """
     Evaluates the model on the Validation images
     """
     print("Validating %s model" % sr_model.model_name)
-    if sr_model.model == None: sr_model.create_model(load_weights=True)
+    if sr_model.model == None:
+        sr_model.create_model( load_weights=True)
     if sr_model.evaluation_func is None:
         if sr_model.uses_learning_phase:
             sr_model.evaluation_func = K.function([sr_model.model.layers[0].input, K.learning_phase()],
@@ -269,7 +268,7 @@ def _evaluate(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=Fa
         else:
             sr_model.evaluation_func = K.function([sr_model.model.layers[0].input],
                                               [sr_model.model.layers[-1].output])
-    predict_path = "val_predict/"
+    predict_path = "data/val_images/predicted/"
     if not os.path.exists(predict_path):
         os.makedirs(predict_path)
     validation_path_set5 = validation_dir + "set5/"
@@ -449,7 +448,7 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
 class ImageSuperResolutionModel(BaseSuperResolutionModel):
 
     def __init__(self, scale_factor):
-        super(ImageSuperResolutionModel, self).__init__("data/SR", scale_factor)
+        super(ImageSuperResolutionModel, self).__init__("SR", scale_factor)
 
         self.f1 = 9
         self.f2 = 1
@@ -460,7 +459,7 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
 
         self.weight_path = "data/weights/SR Weights %dX.h5" % self.scale_factor
 
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
+    def create_model(self, height=None, width=None, channels=3, load_weights=False, batch_size=128):
         """
             Creates a model to be used to scale images of specific height and width.
         """
@@ -483,5 +482,6 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
 
     def fit(self, batch_size=128, nb_epochs=100, save_history=True):
         return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history)
+
 
 
