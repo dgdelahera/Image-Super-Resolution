@@ -3,24 +3,19 @@ from __future__ import print_function, division
 from tensorflow.contrib.keras.api.keras.models import Model
 from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D
 from tensorflow.contrib.keras.api.keras import backend as K
+import tensorflow as tf
 
 import tensorflow.contrib.keras.api.keras.callbacks as callbacks
 import tensorflow.contrib.keras.api.keras.optimizers as optimizers
 
 from advanced import TensorBoardBatch
 import img_utils
-
+import utils
 import numpy as np
 import os
 import time
 import warnings
 
-try:
-    import cv2
-    _cv2_available = True
-except:
-    warnings.warn('Could not load opencv properly. This may affect the quality of output images.')
-    _cv2_available = False
 
 train_path = img_utils.output_path
 validation_path = img_utils.validation_output_path
@@ -109,6 +104,9 @@ class BaseSuperResolutionModel(object):
                                                                            scale_factor=2,
                                                                            batch_size=batch_size),
                                  validation_steps=val_count // batch_size + 1)
+
+        frozen_graph = utils.freeze_session(K.get_session(), output_names=[out.op.name for out in self.model.outputs])
+        tf.train.write_graph(frozen_graph, "data/frozen_graph", "model.pb", as_text=False)
 
         return self.model
 
@@ -202,11 +200,6 @@ class BaseSuperResolutionModel(object):
 
         result = np.clip(result, 0, 255).astype('uint8')
 
-        if _cv2_available:
-            # used to remove noisy edges
-            result = cv2.pyrUp(result)
-            result = cv2.medianBlur(result, 3)
-            result = cv2.pyrDown(result)
 
         if verbose: print("\nCompleted De-processing image.")
 
@@ -457,7 +450,7 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         self.n1 = 64
         self.n2 = 32
 
-        self.weight_path = "data/weights/SR Weights %dX.h5" % self.scale_factor
+        self.weight_path = "data/weights/SR_%dX.h5" % self.scale_factor
 
     def create_model(self, height=None, width=None, channels=3, load_weights=False, batch_size=128):
         """

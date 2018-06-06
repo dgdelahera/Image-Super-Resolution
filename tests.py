@@ -3,7 +3,6 @@ from __future__ import print_function, division
 import models
 import tensorflow as tf
 
-
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_integer('scale_factor', 2,
@@ -17,43 +16,53 @@ tf.app.flags.DEFINE_string('val_dir', 'data/val_images/',
 tf.app.flags.DEFINE_string('save_dir', 'data/save',
                            """Directory where to write event logs """
                            """and checkpoint.""")
-tf.app.flags.DEFINE_string('mode', 'fast',
+tf.app.flags.DEFINE_string('mode', 'patch',
                            """Mode of operation. Choices are "fast" or "patch.""")
 tf.app.flags.DEFINE_integer('patch_size', 8,
                             """Size of patches.""")
 tf.app.flags.DEFINE_string('suffix', 'str',
                            """Suffix of saved image.""")
 
-def test():
 
+def test():
     """
     Train Super Resolution
     """
-    # # Entrenar:
-    #sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
-    #sr.create_model(height=64, width=64, load_weights=False)
-    #sr.fit(nb_epochs=FLAGS.num_epochs)
+    action = input("\n"
+                   "Type the number of action you would like to do:\n"
+                   "\t[1] Train the model.\n"
+                   "\t[2] Eval the model.\n"
+                   "\t[3] Upscale an image.\n\n")
 
-    # """
-    # Evaluate Super Resolution on Set5/14
-    #sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
-    #sr.evaluate(FLAGS.val_dir)
-    #
-    #
-    # """
-    # Compare output images of sr, esr, dsr and ddsr models
-    # """
-    # # Main:::
-    with tf.device('/CPU:0'):
-       model = models.ImageSuperResolutionModel(FLAGS.scale_factor)
-       model.upscale(FLAGS.img_dir + "t1.bmp", save_intermediate=True, mode=FLAGS.mode, patch_size=FLAGS.patch_size,
-                     suffix=FLAGS.suffix)
+    if action not in ['1', '2', '3']:
+        print("Invalid action.")
+        return 0
+    if action == "1":
+        mode = input("\n"
+                     "Would you like to restore the previous weights?:\n"
+                     "\t[1] Yes.\n"
+                     "\t[2] No.\n\n")
+        if mode == "1":
+            sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+            sr.create_model(height=64, width=64, load_weights=True)
+            sr.fit(nb_epochs=FLAGS.num_epochs)
+        if mode == "2":
+            sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+            sr.create_model(height=64, width=64, load_weights=False)
+            sr.fit(nb_epochs=FLAGS.num_epochs)
 
-    # sr = models.ImageSuperResolutionModel(scale)
-    # sr.upscale(path, save_intermediate=False, suffix="sr")
-    #
-    # gansr = models.GANImageSuperResolutionModel(scale)
-    # gansr.upscale(path, save_intermediate=False, suffix='gansr')
+    if action == "2":
+        sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+        sr.evaluate(FLAGS.val_dir)
+
+    if action == "3":
+        # with tf.device('/CPU:0'):
+        image = input("\n"
+                     "Type the image to upscale:\n\n")
+        model = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+        model.upscale(FLAGS.img_dir + image, save_intermediate=True, mode=FLAGS.mode, patch_size=FLAGS.patch_size,
+                      suffix=FLAGS.suffix)
+
 
 
 def main(argv=None):
@@ -62,6 +71,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     tf.app.run()
-
-
-
