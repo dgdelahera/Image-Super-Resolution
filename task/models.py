@@ -8,14 +8,11 @@ import tensorflow as tf
 import tensorflow.contrib.keras.api.keras.callbacks as callbacks
 import tensorflow.contrib.keras.api.keras.optimizers as optimizers
 
-from advanced import TensorBoardBatch
-import img_utils
-import utils
+from task.advanced import TensorBoardBatch
+from task import utils, img_utils
 import numpy as np
 import os
 import time
-import warnings
-
 
 train_path = img_utils.output_path
 validation_path = img_utils.validation_output_path
