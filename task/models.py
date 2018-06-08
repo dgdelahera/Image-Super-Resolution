@@ -174,7 +174,7 @@ class BaseSuperResolutionModel(object):
         if save_intermediate:
             if verbose: print("Saving intermediate image.")
             aux_str = path[0]
-            fn = "data/results/" + aux_str.replace("data/input_images/", "") + "_intermediate_" + path[1]
+            fn = "data/results/" + aux_str.replace("data/examples/", "") + "_intermediate_" + path[1]
             print(fn)
             intermediate_img = imresize(true_img, (init_dim_1 * scale_factor, init_dim_2 * scale_factor))
             imsave(fn, intermediate_img)

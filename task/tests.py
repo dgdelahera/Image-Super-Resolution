@@ -60,7 +60,7 @@ def test():
         image = input("\n"
                      "Type the image to upscale:\n\n")
         model = models.ImageSuperResolutionModel(FLAGS.scale_factor)
-        model.upscale(FLAGS.img_dir + image, save_intermediate=True, mode=FLAGS.mode, patch_size=FLAGS.patch_size,
+        model.upscale("data/examples/" + image, save_intermediate=True, mode=FLAGS.mode, patch_size=FLAGS.patch_size,
                       suffix=FLAGS.suffix)
 
 
