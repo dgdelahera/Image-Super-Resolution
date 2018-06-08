@@ -9,11 +9,11 @@ tf.app.flags.DEFINE_integer('scale_factor', 2,
                             """Scale factor.""")
 tf.app.flags.DEFINE_integer('num_epochs', 250,
                             """Size of batches.""")
-tf.app.flags.DEFINE_string('img_dir', 'task/data/input_images/',
+tf.app.flags.DEFINE_string('img_dir', 'data/input_images/',
                            """Directory where to find images input """)
-tf.app.flags.DEFINE_string('val_dir', 'task/data/val_images/',
+tf.app.flags.DEFINE_string('val_dir', 'data/val_images/',
                            """Directory where to find validation images """)
-tf.app.flags.DEFINE_string('save_dir', 'task/data/save',
+tf.app.flags.DEFINE_string('save_dir', 'data/save',
                            """Directory where to write event logs """
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('mode', 'patch',
