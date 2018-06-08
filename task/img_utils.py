@@ -260,9 +260,9 @@ if __name__ == "__main__":
     true_upscale = True
 
     transform_images_temp(input_path, output_path, scaling_factor=2, max_nb_images=-1,
-                      true_upscale=False)
+                       true_upscale=False)
     transform_images_temp(validation_set5_path, validation_output_path, scaling_factor=2, max_nb_images=-1,
-                     true_upscale=False)
-    # transform_images_temp(validation_set14_path, validation_output_path, scaling_factor=scaling_factor, max_nb_images=-1,
-    #                       true_upscale=true_upscale)
+                      true_upscale=False)
+    transform_images_temp(validation_set14_path, validation_output_path, scaling_factor=scaling_factor, max_nb_images=-1,
+                           true_upscale=False)
     pass

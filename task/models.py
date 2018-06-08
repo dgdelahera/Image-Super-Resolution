@@ -173,7 +173,9 @@ class BaseSuperResolutionModel(object):
         intermediate_img = None
         if save_intermediate:
             if verbose: print("Saving intermediate image.")
-            fn = path[0] + "_intermediate_" + path[1]
+            aux_str = path[0]
+            fn = "data/results/" + aux_str.replace("data/input_images/", "") + "_intermediate_" + path[1]
+            print(fn)
             intermediate_img = imresize(true_img, (init_dim_1 * scale_factor, init_dim_2 * scale_factor))
             imsave(fn, intermediate_img)
             img_conv = images.astype(np.float32) / 255.
@@ -205,7 +207,7 @@ class BaseSuperResolutionModel(object):
             return result
 
         if verbose: print("Saving image.")
-        imsave(filename, result)
+        imsave("data/results " +filename, result)
 
     def __match_autoencoder_size(self, img_dim_1, img_dim_2, init_dim_1, init_dim_2, scale_factor):
         if self.type_requires_divisible_shape:
@@ -471,7 +473,7 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         return model
 
     def fit(self, batch_size=128, nb_epochs=100, save_history=True):
-        return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history)
+        return super(ImageSuperResolutionModel, self).fit(1, 1, save_history)
 
 
 
