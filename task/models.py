@@ -473,7 +473,7 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         return model
 
     def fit(self, batch_size=128, nb_epochs=100, save_history=True):
-        return super(ImageSuperResolutionModel, self).fit(1, 1, save_history)
+        return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history)
 
 
 
