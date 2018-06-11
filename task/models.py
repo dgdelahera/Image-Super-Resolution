@@ -75,7 +75,7 @@ class BaseSuperResolutionModel(object):
 
         return init
 
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True) -> Model:
+    def fit(self, batch_size=128, nb_epochs=100, save_history=True, small_images=False) -> Model:
         """
         Standard method to train any of the models.
         """
@@ -86,6 +86,10 @@ class BaseSuperResolutionModel(object):
 
         callback_list = [callbacks.ModelCheckpoint(self.weight_path, monitor='val_PSNRLoss', save_best_only=True,
                                                    mode='max', save_weights_only=True, verbose=2)]
+        #TODO: QUitar estas 2 lineas
+        # node_names = [node.name for node in K.get_session().graph.as_graph_def().node]
+        # print(node_names)
+
         if save_history:
 
             log_dir = 'data/%s_logs/' % self.model_name
@@ -94,7 +98,7 @@ class BaseSuperResolutionModel(object):
 
         print("Training model : %s" % (self.__class__.__name__))
         self.model.fit_generator(img_utils.image_generator(train_path, scale_factor=2,
-                                                           batch_size=batch_size),
+                                                           batch_size=batch_size, small_train_images=small_images),
                                  steps_per_epoch=samples_per_epoch // batch_size + 1,
                                  epochs=nb_epochs, callbacks=callback_list,
                                  validation_data=img_utils.image_generator(validation_path,
@@ -472,8 +476,8 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         self.model = model
         return model
 
-    def fit(self, batch_size=128, nb_epochs=100, save_history=True):
-        return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history)
+    def fit(self, batch_size=128, nb_epochs=100, save_history=True, small_images=False):
+        return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history, small_images)
 
 
 

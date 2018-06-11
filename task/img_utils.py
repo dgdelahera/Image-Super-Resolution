@@ -4,9 +4,9 @@ import numpy as np
 from scipy.misc import imsave, imread, imresize
 from sklearn.feature_extraction.image import reconstruct_from_patches_2d, extract_patches_2d
 
-
 import os
 import time
+from task import utils
 
 '''
 _image_scale_multiplier is a special variable which is used to alter image size.
@@ -19,9 +19,10 @@ _image_scale_multiplier = 1
 img_size = 128 * _image_scale_multiplier
 stride = 64 * _image_scale_multiplier
 
-assert (img_size ** 2) % (stride ** 2) == 0, "Number of images generated from strided subsample of the image needs to be \n" \
-                                             "a positive integer. Change stride such that : \n" \
-                                             "(img_size ** 2) / (stride ** 2) is a positive integer."
+assert (img_size ** 2) % (
+            stride ** 2) == 0, "Number of images generated from strided subsample of the image needs to be \n" \
+                               "a positive integer. Change stride such that : \n" \
+                               "(img_size ** 2) / (stride ** 2) is a positive integer."
 
 input_path = "data/input_images/"
 validation_path = "data/val_images/"
@@ -87,7 +88,6 @@ def transform_images_temp(directory, output_directory, scaling_factor=2, max_nb_
                 hr_samples[i, :, :, :] = next(image_subsample_iterator)
                 i += 1
 
-
         t1 = time.time()
         # Create nb_hr_images 'X' and 'Y' sub-images of size hr_patch_size for each patch
         for i in range(nb_hr_images):
@@ -96,7 +96,7 @@ def transform_images_temp(directory, output_directory, scaling_factor=2, max_nb_
             imsave(output_directory + "/y/" + "%d_%d.png" % (index + id_advance, i + 1), ip)
 
             # Apply Gaussian Blur to Y
-            #op = gaussian_filter(ip, sigma=0.5)
+            # op = gaussian_filter(ip, sigma=0.5)
 
             # Subsample by scaling factor to Y
             op = imresize(ip, (lr_patch_size, lr_patch_size), interp='bicubic')
@@ -130,7 +130,7 @@ def subimage_generator(img, stride, patch_size, nb_hr_images):
     for _ in range(nb_hr_images):
         for x in range(0, img_size, stride):
             for y in range(0, img_size, stride):
-                subimage = img[x : x + patch_size, y : y + patch_size, :]
+                subimage = img[x: x + patch_size, y: y + patch_size, :]
 
                 yield subimage
 
@@ -148,28 +148,29 @@ def combine_patches(in_patches, out_shape, scale):
     recon = reconstruct_from_patches_2d(in_patches, out_shape)
     return recon
 
+
 def image_generator(directory, scale_factor=2, target_shape=None, channels=3, small_train_images=False, shuffle=True,
                     batch_size=32, nb_inputs=1, seed=None):
     if not target_shape:
         if small_train_images:
-                image_shape = (32 * _image_scale_multiplier, 32 * _image_scale_multiplier, channels)
-                y_image_shape = (32 * scale_factor * _image_scale_multiplier,
-                                 32 * scale_factor * _image_scale_multiplier, channels)
+            image_shape = (64 * _image_scale_multiplier, 64 * _image_scale_multiplier, channels)
+            y_image_shape = (32 * scale_factor * _image_scale_multiplier,
+                             32 * scale_factor * _image_scale_multiplier, channels)
         else:
-                image_shape = (32 * scale_factor * _image_scale_multiplier, 32 * scale_factor * _image_scale_multiplier,
-                               channels)
-                y_image_shape = (32 * scale_factor * _image_scale_multiplier, 32 * scale_factor * _image_scale_multiplier,
-                               channels)
+            image_shape = (32 * scale_factor * _image_scale_multiplier, 32 * scale_factor * _image_scale_multiplier,
+                           channels)
+            y_image_shape = (32 * scale_factor * _image_scale_multiplier, 32 * scale_factor * _image_scale_multiplier,
+                             channels)
     else:
         if small_train_images:
-                y_image_shape = target_shape + (channels,)
+            y_image_shape = target_shape + (channels,)
 
-                target_shape = (target_shape[0] * _image_scale_multiplier // scale_factor,
-                                target_shape[1] * _image_scale_multiplier // scale_factor)
-                image_shape = target_shape + (channels,)
+            target_shape = (target_shape[0] * _image_scale_multiplier // scale_factor,
+                            target_shape[1] * _image_scale_multiplier // scale_factor)
+            image_shape = target_shape + (channels,)
         else:
-                image_shape = target_shape + (channels,)
-                y_image_shape = image_shape
+            image_shape = target_shape + (channels,)
+            y_image_shape = image_shape
 
     file_names = [f for f in sorted(os.listdir(directory + "X/"))]
     X_filenames = [os.path.join(directory, "X", f) for f in file_names]
@@ -190,7 +191,7 @@ def image_generator(directory, scale_factor=2, target_shape=None, channels=3, sm
             x_fn = X_filenames[j]
             img = imread(x_fn, mode='RGB')
             if small_train_images:
-                img = imresize(img, (32 * _image_scale_multiplier, 32 * _image_scale_multiplier))
+                img = imresize(img, (64 * _image_scale_multiplier, 64 * _image_scale_multiplier))
             img = img.astype('float32') / 255.
 
             batch_x[i] = img
@@ -206,6 +207,7 @@ def image_generator(directory, scale_factor=2, target_shape=None, channels=3, sm
         else:
             batch_x = [batch_x for i in range(nb_inputs)]
             yield batch_x, batch_y
+
 
 def _index_generator(N, batch_size=32, shuffle=True, seed=None):
     batch_index = 0
@@ -259,10 +261,12 @@ if __name__ == "__main__":
     # Leave as false to create same size input and output images
     true_upscale = True
 
-    transform_images_temp(input_path, output_path, scaling_factor=2, max_nb_images=-1,
-                       true_upscale=False)
+    # Data augmentation
+    #utils.data_augmentation(augment_level=8)
+
+    transform_images_temp(input_path, output_path, scaling_factor=2, max_nb_images=-1, true_upscale=False)
     transform_images_temp(validation_set5_path, validation_output_path, scaling_factor=2, max_nb_images=-1,
-                      true_upscale=False)
-    transform_images_temp(validation_set14_path, validation_output_path, scaling_factor=scaling_factor, max_nb_images=-1,
-                           true_upscale=False)
+                          true_upscale=False)
+    transform_images_temp(validation_set14_path, validation_output_path, scaling_factor=scaling_factor, max_nb_images=-1
+                          , true_upscale=False)
     pass

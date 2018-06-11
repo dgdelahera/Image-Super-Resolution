@@ -27,7 +27,8 @@ tf.app.flags.DEFINE_string('suffix', 'str',
 def train():
     sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
     sr.create_model(height=64, width=64, load_weights=False)
-    sr.fit(nb_epochs=FLAGS.num_epochs)
+    # Check small_images transform_image true_upscale
+    sr.fit(nb_epochs=FLAGS.num_epochs, small_images=False)
 
 
 def main(argv=None):

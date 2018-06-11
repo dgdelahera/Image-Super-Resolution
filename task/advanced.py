@@ -4,7 +4,7 @@ from tensorflow.contrib.keras.api.keras.callbacks import TensorBoard
 
 class TensorBoardBatch(TensorBoard):
     #TODO: Fix Tensorboard
-    def __init__(self, log_dir='/data/SR_logs',
+    def __init__(self, log_dir='data/SR_logs',
                  histogram_freq=0,
                  batch_size=32,
                  write_graph=True,
