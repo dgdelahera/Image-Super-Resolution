@@ -25,10 +25,14 @@ tf.app.flags.DEFINE_string('suffix', 'str',
 
 
 def train():
-    sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
-    sr.create_model(height=64, width=64, load_weights=False)
+    #sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+    #sr.create_model()
     # Check small_images transform_image true_upscale
-    sr.fit(nb_epochs=FLAGS.num_epochs, small_images=False)
+    #sr.fit(nb_epochs=FLAGS.num_epochs)
+
+    dsr = models.DenoisingAutoEncoderSR(scale_factor=2)
+    dsr.create_model(width=64, height=64)
+    dsr.fit(nb_epochs=250)
 
 
 def main(argv=None):

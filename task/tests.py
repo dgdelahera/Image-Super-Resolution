@@ -52,14 +52,16 @@ def test():
             sr.fit(nb_epochs=FLAGS.num_epochs)
 
     if action == "2":
-        sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
-        sr.evaluate(FLAGS.val_dir)
+        dssr= models.DenoisingAutoEncoderSR(scale_factor=2)
+        #sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+        dssr.evaluate(FLAGS.val_dir)
 
     if action == "3":
         # with tf.device('/CPU:0'):
         image = input("\n"
                      "Type the image to upscale:\n\n")
-        model = models.ImageSuperResolutionModel(FLAGS.scale_factor)
+        model = models.DenoisingAutoEncoderSR(scale_factor=2)
+        #model = models.ImageSuperResolutionModel(FLAGS.scale_factor)
         model.upscale("data/examples/" + image, save_intermediate=True, mode=FLAGS.mode, patch_size=FLAGS.patch_size,
                       suffix=FLAGS.suffix)
 

@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 
 from tensorflow.contrib.keras.api.keras.models import Model
-from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D
+from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D, Convolution2DTranspose, Add
 from tensorflow.contrib.keras.api.keras import backend as K
 import tensorflow as tf
 
@@ -19,6 +19,7 @@ validation_path = img_utils.validation_output_path
 path_X = img_utils.output_path + "X/"
 path_Y = img_utils.output_path + "y/"
 
+
 def PSNRLoss(y_true, y_pred):
     """
     PSNR is Peek Signal to Noise Ratio, which is similar to mean squared error.
@@ -32,10 +33,11 @@ def PSNRLoss(y_true, y_pred):
     """
     return -10. * K.log(K.mean(K.square(y_pred - y_true))) / K.log(10.)
 
+
 def psnr(y_true, y_pred):
     assert y_true.shape == y_pred.shape, "Cannot calculate PSNR. Input shapes not same." \
                                          " y_true shape = %s, y_pred shape = %s" % (str(y_true.shape),
-                                                                                   str(y_pred.shape))
+                                                                                    str(y_pred.shape))
 
     return -10. * np.log10(np.mean(np.square(y_pred - y_true)))
 
@@ -51,14 +53,14 @@ class BaseSuperResolutionModel(object):
         self.scale_factor = scale_factor
         self.weight_path = None
 
-        self.type_scale_type = "norm" # Default = "norm" = 1. / 255
+        self.type_scale_type = "norm"  # Default = "norm" = 1. / 255
         self.type_requires_divisible_shape = False
         self.type_true_upscaling = False
 
         self.evaluation_func = None
         self.uses_learning_phase = False
 
-    def create_model(self, height=None, width=None, channels=3, load_weights=False, batch_size=128) -> Model:
+    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128) -> Model:
         """
         Subclass dependent implementation.
         """
@@ -86,12 +88,8 @@ class BaseSuperResolutionModel(object):
 
         callback_list = [callbacks.ModelCheckpoint(self.weight_path, monitor='val_PSNRLoss', save_best_only=True,
                                                    mode='max', save_weights_only=True, verbose=2)]
-        #TODO: QUitar estas 2 lineas
-        # node_names = [node.name for node in K.get_session().graph.as_graph_def().node]
-        # print(node_names)
 
         if save_history:
-
             log_dir = 'data/%s_logs/' % self.model_name
             tensorboard = TensorBoardBatch(log_dir, batch_size=batch_size)
             callback_list.append(tensorboard)
@@ -106,9 +104,6 @@ class BaseSuperResolutionModel(object):
                                                                            batch_size=batch_size),
                                  validation_steps=val_count // batch_size + 1)
 
-        frozen_graph = utils.freeze_session(K.get_session(), output_names=[out.op.name for out in self.model.outputs])
-        tf.train.write_graph(frozen_graph, "data/frozen_graph", "model.pb", as_text=False)
-
         return self.model
 
     def evaluate(self, validation_dir):
@@ -116,7 +111,6 @@ class BaseSuperResolutionModel(object):
             _evaluate_denoise(self, validation_dir)
         else:
             _evaluate(self, validation_dir)
-
 
     def upscale(self, img_path, save_intermediate=False, return_image=False, suffix="scaled",
                 patch_size=8, mode="patch", verbose=True):
@@ -133,6 +127,7 @@ class BaseSuperResolutionModel(object):
         """
         import os
         from scipy.misc import imread, imresize, imsave
+
 
         # Destination path
         path = os.path.splitext(img_path)
@@ -187,6 +182,13 @@ class BaseSuperResolutionModel(object):
         model = self.create_model(img_dim_2, img_dim_1, load_weights=True)
         if verbose: print("Model loaded.")
 
+        # TODO: QUitar estas 2 lineas
+        #node_names = [node.name for node in K.get_session().graph.as_graph_def().node]
+        #print(node_names)
+        # TODO: Guardar el modelo en la ejecuccion de una foto
+        #frozen_graph = utils.freeze_session(K.get_session(), output_names=[out.op.name for out in self.model.outputs])
+        #tf.train.write_graph(frozen_graph, "data/frozen_graph", "model.pb", as_text=False)
+
         # Create prediction for image patches
         result = model.predict(img_conv, batch_size=128, verbose=verbose)
 
@@ -199,10 +201,9 @@ class BaseSuperResolutionModel(object):
             out_shape = (init_dim_1 * scale_factor, init_dim_2 * scale_factor, 3)
             result = img_utils.combine_patches(result, out_shape, scale_factor)
         else:
-            result = result[0, :, :, :] # Access the 3 Dimensional image vector
+            result = result[0, :, :, :]  # Access the 3 Dimensional image vector
 
         result = np.clip(result, 0, 255).astype('uint8')
-
 
         if verbose: print("\nCompleted De-processing image.")
 
@@ -256,14 +257,14 @@ def _evaluate(sr_model: BaseSuperResolutionModel, validation_dir, scale_pred=Fal
     """
     print("Validating %s model" % sr_model.model_name)
     if sr_model.model == None:
-        sr_model.create_model( load_weights=True)
+        sr_model.create_model(load_weights=True)
     if sr_model.evaluation_func is None:
         if sr_model.uses_learning_phase:
             sr_model.evaluation_func = K.function([sr_model.model.layers[0].input, K.learning_phase()],
                                                   [sr_model.model.layers[-1].output])
         else:
             sr_model.evaluation_func = K.function([sr_model.model.layers[0].input],
-                                              [sr_model.model.layers[-1].output])
+                                                  [sr_model.model.layers[-1].output])
     predict_path = "data/val_images/predicted/"
     if not os.path.exists(predict_path):
         os.makedirs(predict_path)
@@ -348,9 +349,9 @@ def _evaluate(sr_model: BaseSuperResolutionModel, validation_dir, scale_pred=Fal
         print("Average PRNS value of validation images = %00.4f \n" % (total_psnr / nb_images))
 
 
-def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=False):
+def _evaluate_denoise(sr_model: BaseSuperResolutionModel, validation_dir, scale_pred=False):
     print("Validating %s model" % sr_model.model_name)
-    predict_path = "val_predict/"
+    predict_path = "data/val_images/predicted/"
     if not os.path.exists(predict_path):
         os.makedirs(predict_path)
 
@@ -401,7 +402,6 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
                 img = img_utils.imresize(img, (width, height), interp='bicubic')
 
             x = np.expand_dims(img, axis=0)
-
 
             sr_model.model = sr_model.create_model(height, width, load_weights=True)
 
@@ -471,6 +471,7 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         adam = optimizers.Adam(lr=1e-3)
         model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
         if load_weights is True:
+            print("Loading weghts from: ", self.weight_path)
             model.load_weights(self.weight_path)
 
         self.model = model
@@ -480,4 +481,45 @@ class ImageSuperResolutionModel(BaseSuperResolutionModel):
         return super(ImageSuperResolutionModel, self).fit(batch_size, nb_epochs, save_history, small_images)
 
 
+class DenoisingAutoEncoderSR(BaseSuperResolutionModel):
 
+    def __init__(self, scale_factor):
+        super(DenoisingAutoEncoderSR, self).__init__("DASR", scale_factor)
+
+        self.n1 = 64
+        self.n2 = 32
+
+        self.weight_path = "data/weights/DASR_%dX.h5" % (self.scale_factor)
+
+    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
+        """
+            Creates a model to remove / reduce noise from upscaled images.
+        """
+        from keras.layers.convolutional import Deconvolution2D
+
+        # Perform check that model input shape is divisible by 4
+        init = super(DenoisingAutoEncoderSR, self).create_model(height, width, channels, load_weights, batch_size)
+
+        output_shape = (None, width, height, channels)
+
+        level1_1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(init)
+        level2_1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(level1_1)
+
+        level2_2 = Convolution2DTranspose(self.n1, (3, 3), activation='relu', padding='same')(level2_1)
+        level2 = Add()([level2_1, level2_2])
+
+        level1_2 = Convolution2DTranspose(self.n1, (3, 3), activation='relu', padding='same')(level2)
+        level1 = Add()([level1_1, level1_2])
+
+        decoded = Convolution2D(channels, (5, 5), activation='linear', padding='same')(level1)
+
+        model = Model(init, decoded)
+        adam = optimizers.Adam(lr=1e-3)
+        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
+        if load_weights: model.load_weights(self.weight_path)
+
+        self.model = model
+        return model
+
+    def fit(self, batch_size=128, nb_epochs=100, save_history=True, small_images=False):
+        return super(DenoisingAutoEncoderSR, self).fit(batch_size, nb_epochs, save_history, small_images)

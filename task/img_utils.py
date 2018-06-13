@@ -20,9 +20,9 @@ img_size = 128 * _image_scale_multiplier
 stride = 64 * _image_scale_multiplier
 
 assert (img_size ** 2) % (
-            stride ** 2) == 0, "Number of images generated from strided subsample of the image needs to be \n" \
-                               "a positive integer. Change stride such that : \n" \
-                               "(img_size ** 2) / (stride ** 2) is a positive integer."
+        stride ** 2) == 0, "Number of images generated from strided subsample of the image needs to be \n" \
+                           "a positive integer. Change stride such that : \n" \
+                           "(img_size ** 2) / (stride ** 2) is a positive integer."
 
 input_path = "data/input_images/"
 validation_path = "data/val_images/"
@@ -159,8 +159,7 @@ def image_generator(directory, scale_factor=2, target_shape=None, channels=3, sm
         else:
             image_shape = (32 * scale_factor * _image_scale_multiplier, 32 * scale_factor * _image_scale_multiplier,
                            channels)
-            y_image_shape = (32 * scale_factor * _image_scale_multiplier, 32 * scale_factor * _image_scale_multiplier,
-                             channels)
+            y_image_shape = image_shape
     else:
         if small_train_images:
             y_image_shape = target_shape + (channels,)
@@ -191,7 +190,7 @@ def image_generator(directory, scale_factor=2, target_shape=None, channels=3, sm
             x_fn = X_filenames[j]
             img = imread(x_fn, mode='RGB')
             if small_train_images:
-                img = imresize(img, (64 * _image_scale_multiplier, 64 * _image_scale_multiplier))
+                img = imresize(img, (32 * _image_scale_multiplier, 32 * _image_scale_multiplier))
             img = img.astype('float32') / 255.
 
             batch_x[i] = img
@@ -262,7 +261,7 @@ if __name__ == "__main__":
     true_upscale = True
 
     # Data augmentation
-    #utils.data_augmentation(augment_level=8)
+    # utils.data_augmentation(augment_level=8)
 
     transform_images_temp(input_path, output_path, scaling_factor=2, max_nb_images=-1, true_upscale=False)
     transform_images_temp(validation_set5_path, validation_output_path, scaling_factor=2, max_nb_images=-1,
