@@ -52,7 +52,7 @@ def test():
             sr.fit(nb_epochs=FLAGS.num_epochs)
 
     if action == "2":
-        dssr= models.DenoisingAutoEncoderSR(scale_factor=2)
+        dssr= models.DenoisingAutoEncoderSR(FLAGS.scale_factor)
         #sr = models.ImageSuperResolutionModel(FLAGS.scale_factor)
         dssr.evaluate(FLAGS.val_dir)
 

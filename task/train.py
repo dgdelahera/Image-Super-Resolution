@@ -30,10 +30,13 @@ def train():
     # Check small_images transform_image true_upscale
     #sr.fit(nb_epochs=FLAGS.num_epochs)
 
-    dsr = models.DenoisingAutoEncoderSR(scale_factor=2)
-    dsr.create_model(width=64, height=64)
-    dsr.fit(nb_epochs=250)
+    #dsr = models.DenoisingAutoEncoderSR(scale_factor=2)
+    #dsr.create_model(width=64, height=64)
+    #dsr.fit(nb_epochs=250)
 
+    ddsr = models.DeepDenoiseSR(scale_factor=2)
+    ddsr.create_model(width=64, height=64)
+    ddsr.fit(nb_epochs=250)
 
 def main(argv=None):
     train()

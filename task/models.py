@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 
 from tensorflow.contrib.keras.api.keras.models import Model
-from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D, Convolution2DTranspose, Add
+from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D, Convolution2DTranspose, Add, BatchNormalization, Activation, UpSampling2D, MaxPooling2D
 from tensorflow.contrib.keras.api.keras import backend as K
 import tensorflow as tf
 
@@ -491,7 +491,7 @@ class DenoisingAutoEncoderSR(BaseSuperResolutionModel):
 
         self.weight_path = "data/weights/DASR_%dX.h5" % (self.scale_factor)
 
-    def create_model(self, height=32, width=32, channels=3, load_weights=False, batch_size=128):
+    def create_model(self, height=None, width=None, channels=3, load_weights=False, batch_size=128):
         """
             Creates a model to remove / reduce noise from upscaled images.
         """
@@ -523,3 +523,60 @@ class DenoisingAutoEncoderSR(BaseSuperResolutionModel):
 
     def fit(self, batch_size=128, nb_epochs=100, save_history=True, small_images=False):
         return super(DenoisingAutoEncoderSR, self).fit(batch_size, nb_epochs, save_history, small_images)
+
+class DeepDenoiseSR(BaseSuperResolutionModel):
+
+    def __init__(self, scale_factor):
+        super(DeepDenoiseSR, self).__init__("DDSR", scale_factor)
+
+        # Treat this model as a denoising auto encoder
+        # Force the fit, evaluate and upscale methods to take special care about image shape
+        self.type_requires_divisible_shape = True
+
+        self.n1 = 64
+        self.n2 = 128
+        self.n3 = 256
+
+        self.weight_path = "data/weights/DDSR_%dX.h5" % (self.scale_factor)
+
+    def create_model(self, height=None, width=None, channels=3, load_weights=False, batch_size=128):
+        # Perform check that model input shape is divisible by 4
+        init = super(DeepDenoiseSR, self).create_model(height, width, channels, load_weights, batch_size)
+
+        c1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(init)
+        c1 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(c1)
+
+        x = MaxPooling2D((2, 2))(c1)
+
+        c2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(x)
+        c2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(c2)
+
+        x = MaxPooling2D((2, 2))(c2)
+
+        c3 = Convolution2D(self.n3, (3, 3), activation='relu', padding='same')(x)
+
+        x = UpSampling2D()(c3)
+
+        c2_2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(x)
+        c2_2 = Convolution2D(self.n2, (3, 3), activation='relu', padding='same')(c2_2)
+
+        m1 = Add()([c2, c2_2])
+        m1 = UpSampling2D()(m1)
+
+        c1_2 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(m1)
+        c1_2 = Convolution2D(self.n1, (3, 3), activation='relu', padding='same')(c1_2)
+
+        m2 = Add()([c1, c1_2])
+
+        decoded = Convolution2D(input_shape=(64,64,3), filters=channels, kernel_size=(5,5), activation='linear', padding='same')(m2)
+
+        model = Model(init, decoded)
+        adam = optimizers.Adam(lr=1e-3)
+        model.compile(optimizer=adam, loss='mse', metrics=[PSNRLoss])
+        if load_weights: model.load_weights(self.weight_path)
+
+        self.model = model
+        return model
+
+    def fit(self, batch_size=128, nb_epochs=100, save_history=True, small_images=False):
+        return super(DeepDenoiseSR, self).fit(batch_size, nb_epochs, save_history, small_images)
